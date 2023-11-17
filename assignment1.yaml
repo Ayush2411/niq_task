@@ -1,56 +1,70 @@
-trigger:
-  branches:
-    include:
-      - main
+name: .NET
 
-pool:
-  vmImage: 'staging-vm'
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
-variables:
-  - name: buildConfiguration
-    value: 'Release'
+env:
+  app-name: "sample_dotnet"
+  rg-name: "staging-resource-group"
 
-steps:
-  - task: UseDotNet@2
-    displayName: 'Use .NET Core SDK 7.0.x'
-    inputs:
-      packageType: 'sdk'
-      version: '7.x'
+jobs:
+  build:
 
-  - task: DotNetCoreCLI@2
-    displayName: 'Restore dependencies'
-    inputs:
-      command: 'restore'
+    runs-on: staging_vm
 
-  - task: DotNetCoreCLI@2
-    displayName: 'Build the application'
-    inputs:
-      command: 'build'
-      arguments: '--configuration $(buildConfiguration)'
+    steps:
+    - uses: actions/checkout@v3
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: 6.0.x
+    - name: Restore dependencies
+      run: dotnet restore
+    - name: Build
+      run: dotnet build --no-restore
+    - name: Test
+      run: dotnet test --no-build --verbosity normal
+	- name: Publish
+      run: dotnet publish sample_dotnet/sample_dotnet.csproj -c Release -o website
+	- name: Upload a Build Artifact
+	  uses: actions/upload-artifact@v3
+      with:
+        name: website
+        path: sample_dotnet/website/**
+        if-no-files-found: error
+		
+  deploy_staging:
+    needs: build
+    runs-on: staging_vm
+	
+	environment:
+      name: STAGING
+      url: ${{ steps.deploywebapp.outputs.webapp-url }}
+	  
+	steps:
+    - name: Download a Build Artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: website
+        path: website
+	
+    - name: Login via Azure CLI
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+	
+    - name: Deploy web app
+      id: deploywebapp
+      uses: azure/webapps-deploy@v2
+      with:
+        app-name: ${{ env.app-name }}
+        slot-name: staging
+        package: website
+	
+    - name: az cli logout
+      run: az logout
+	 
 
-  - task: DotNetCoreCLI@2
-    displayName: 'Run tests'
-    inputs:
-      command: 'test'
-      arguments: '--configuration $(buildConfiguration)'
-
-  - task: DotNetCoreCLI@2
-    inputs:
-      command: 'publish'
-      publishWebProjects: true
-      arguments: '--configuration Release --output $(Build.ArtifactStagingDirectory)'
-
-  - task: PublishBuildArtifacts@1
-    inputs:
-      pathtoPublish: '$(Build.ArtifactStagingDirectory)'
-      artifactName: 'publishedApp'
-  
-  - task: AzureRmWebAppDeployment@4
-    inputs:
-      ConnectionType: 'AzureRM'
-      azureSubscription: '<YourAzureSubscription>'
-      appType: 'webApp'
-      WebAppName: 'Sample_dotnet_app'
-      packageForLinux: '$(System.DefaultWorkingDirectory)/publishedApp'
-      enableCustomDeployment: true
-      deploymentMethod: 'zipDeploy'
