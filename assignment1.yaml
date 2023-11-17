@@ -51,6 +51,6 @@ steps:
       azureSubscription: '<YourAzureSubscription>'
       appType: 'webApp'
       WebAppName: 'Sample_dotnet_app'
-      packageForLinux: '$(System.DefaultWorkingDirectory)/publishedApp'  # Path to your published application folder
+      packageForLinux: '$(System.DefaultWorkingDirectory)/publishedApp'
       enableCustomDeployment: true
       deploymentMethod: 'zipDeploy'
