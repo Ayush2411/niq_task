@@ -1,0 +1,56 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: 'staging-vm'
+
+variables:
+  - name: buildConfiguration
+    value: 'Release'
+
+steps:
+  - task: UseDotNet@2
+    displayName: 'Use .NET Core SDK 7.0.x'
+    inputs:
+      packageType: 'sdk'
+      version: '7.x'
+
+  - task: DotNetCoreCLI@2
+    displayName: 'Restore dependencies'
+    inputs:
+      command: 'restore'
+
+  - task: DotNetCoreCLI@2
+    displayName: 'Build the application'
+    inputs:
+      command: 'build'
+      arguments: '--configuration $(buildConfiguration)'
+
+  - task: DotNetCoreCLI@2
+    displayName: 'Run tests'
+    inputs:
+      command: 'test'
+      arguments: '--configuration $(buildConfiguration)'
+
+  - task: DotNetCoreCLI@2
+    inputs:
+      command: 'publish'
+      publishWebProjects: true
+      arguments: '--configuration Release --output $(Build.ArtifactStagingDirectory)'
+
+  - task: PublishBuildArtifacts@1
+    inputs:
+      pathtoPublish: '$(Build.ArtifactStagingDirectory)'
+      artifactName: 'publishedApp'
+  
+  - task: AzureRmWebAppDeployment@4
+    inputs:
+      ConnectionType: 'AzureRM'
+      azureSubscription: '<YourAzureSubscription>'
+      appType: 'webApp'
+      WebAppName: 'Sample_dotnet_app'
+      packageForLinux: '$(System.DefaultWorkingDirectory)/publishedApp'  # Path to your published application folder
+      enableCustomDeployment: true
+      deploymentMethod: 'zipDeploy'
